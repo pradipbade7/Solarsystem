@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Solar System Landing Page</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block; /* Removes tiny bottom margin */
+        }
+        /* Overlay styling */
+        #overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            pointer-events: none; /* Let clicks pass through to the 3D scene */
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 300px;
+        }
+        h1 { 
+            margin: 0 0 10px 0; 
+            font-size: 1.8rem; 
+            font-weight: 300;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        p { 
+            margin: 0; 
+            font-size: 0.9rem; 
+            color: #ccc; 
+            line-height: 1.4;
+        }
+        .controls-hint {
+            margin-top: 15px;
+            font-size: 0.8rem;
+            color: #aaa;
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1>Solar System</h1>
+        <p>Interactive 3D visualization.<br>Earth orbit: ~1 minute.</p>
+        <div class="controls-hint">
+            <span>🖱️ Drag to Rotate</span>
+            <span>🔭 Scroll to Zoom</span>
+        </div>
+    </div>
+
+    <!-- Import maps polyfill -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- 0. PROCEDURAL TEXTURE GENERATOR ---
+        
+        function createTexture(type, colorMain, colorSec) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Default Background
+            ctx.fillStyle = colorMain;
+            ctx.fillRect(0, 0, 512, 512);
+
+            if (type === 'sun') {
+                // Improved Sun Surface: fiery noise
+                const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+                gradient.addColorStop(0, '#fffFA0'); // Bright center
+                gradient.addColorStop(0.2, '#ffcc00'); 
+                gradient.addColorStop(1, '#ff8800'); // Darker edge
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 512, 512);
+
+                // Add noise
+                for(let i=0; i<2000; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#ffaa00' : '#ffdd44';
+                    ctx.globalAlpha = 0.3;
+                    const x = Math.random() * 512;
+                    const y = Math.random() * 512;
+                    const r = Math.random() * 40;
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } 
+            else if (type === 'glow') {
+                // Proper Radial Gradient for Glow (No square edges)
+                // We clear the rect first to ensure transparency
+                ctx.clearRect(0, 0, 512, 512);
+                
+                // Gradient from center (white/colored) to outside (transparent)
+                // We limit radius to 256 (half width) so it doesn't touch corners
+                const gradient = ctx.createRadialGradient(256, 256, 20, 256, 256, 256);
+                gradient.addColorStop(0, colorMain); // Center hot color
+                gradient.addColorStop(0.4, colorSec); // Mid color
+                gradient.addColorStop(1, 'rgba(0,0,0,0)'); // Fade to transparent at edges
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 512, 512);
+            }
+            else if (type === 'gas') {
+                const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+                for (let i=0; i<=1; i+=0.05) {
+                    gradient.addColorStop(i, Math.random() > 0.5 ? colorMain : colorSec);
+                }
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0,0,512,512);
+                
+                ctx.globalAlpha = 0.1;
+                ctx.fillStyle = '#fff';
+                for(let i=0; i<500; i++) {
+                     ctx.fillRect(0, Math.random() * 512, 512, Math.random() * 2);
+                }
+            } 
+            else if (type === 'terrestrial') {
+                ctx.fillStyle = colorSec;
+                for(let i=0; i<800; i++) {
+                    ctx.globalAlpha = Math.random() * 0.2;
+                    const x = Math.random() * 512;
+                    const y = Math.random() * 512;
+                    const r = Math.random() * 60;
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } 
+            else if (type === 'rings') {
+                ctx.clearRect(0,0,512,512);
+                const gradient = ctx.createRadialGradient(256, 256, 100, 256, 256, 256);
+                gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                gradient.addColorStop(0.5, colorMain);
+                gradient.addColorStop(0.7, colorSec);
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0,0,512,512);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+
+        // --- 1. SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020205); 
+        scene.fog = new THREE.FogExp2(0x020205, 0.002);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
+        camera.position.set(120, 60, 180);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio); 
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // Tone mapping helps with glowing bright lights
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 40;
+        controls.maxDistance = 800;
+
+        // --- 2. SUN & LIGHTING ---
+
+        // Main Light
+        const sunLight = new THREE.PointLight(0xffffff, 3.0, 2000, 0.5); 
+        sunLight.position.set(0, 0, 0);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.bias = -0.00005;
+        scene.add(sunLight);
+
+        const ambientLight = new THREE.AmbientLight(0x222222);
+        scene.add(ambientLight);
+
+        // Sun Mesh (The solid sphere)
+        const sunTexture = createTexture('sun', '#000000', '#000000'); // Colors handled inside 'sun' type
+        const sunGeometry = new THREE.SphereGeometry(25, 64, 64); 
+        // Use BasicMaterial so it ignores lighting (it IS the light)
+        const sunMaterial = new THREE.MeshBasicMaterial({ 
+            map: sunTexture,
+            color: 0xffffff
+        });
+        const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+        scene.add(sunMesh);
+
+        // --- REALISTIC SUN GLOW ---
+        // 1. Inner Corona (Intense)
+        const glowTex1 = createTexture('glow', 'rgba(255, 255, 200, 1)', 'rgba(255, 150, 0, 0.8)');
+        const glowMat1 = new THREE.SpriteMaterial({ 
+            map: glowTex1,
+            color: 0xffaa00,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false // Fixes occlusion issues
+        });
+        const glowSprite1 = new THREE.Sprite(glowMat1);
+        glowSprite1.scale.set(80, 80, 1);
+        scene.add(glowSprite1);
+
+        // 2. Outer Halo (Soft fade)
+        const glowTex2 = createTexture('glow', 'rgba(255, 100, 0, 0.5)', 'rgba(100, 0, 0, 0.2)');
+        const glowMat2 = new THREE.SpriteMaterial({ 
+            map: glowTex2,
+            color: 0xff4400,
+            transparent: true,
+            opacity: 0.4,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const glowSprite2 = new THREE.Sprite(glowMat2);
+        glowSprite2.scale.set(140, 140, 1); // Much larger
+        scene.add(glowSprite2);
+
+
+        // --- 3. STARFIELD ---
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 5000;
+        const starPositions = new Float32Array(starCount * 3);
+        for(let i=0; i<starCount*3; i++) {
+            starPositions[i] = (Math.random() - 0.5) * 2500;
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7, transparent: true, opacity: 0.8 });
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // --- 4. PLANET LOGIC ---
+        const planets = [];
+
+        function getPlanetStyle(name) {
+            switch(name) {
+                case 'Mercury': return { type: 'terrestrial', c1: '#999999', c2: '#777777' };
+                case 'Venus': return { type: 'terrestrial', c1: '#eebb88', c2: '#ddaa66' };
+                case 'Earth': return { type: 'terrestrial', c1: '#1144cc', c2: '#228822' };
+                case 'Mars': return { type: 'terrestrial', c1: '#cc4422', c2: '#aa3311' };
+                case 'Jupiter': return { type: 'gas', c1: '#cc9966', c2: '#aa8855' };
+                case 'Saturn': return { type: 'gas', c1: '#ccbb88', c2: '#aa9977' };
+                case 'Uranus': return { type: 'gas', c1: '#88ccff', c2: '#66aaff' };
+                case 'Neptune': return { type: 'gas', c1: '#3333ff', c2: '#2222cc' };
+                default: return { type: 'terrestrial', c1: '#ffffff', c2: '#cccccc' };
+            }
+        }
+
+        function createPlanet(name, size, distance, relativeSpeed, hasRing) {
+            const orbitContainer = new THREE.Object3D();
+            scene.add(orbitContainer);
+
+            const style = getPlanetStyle(name);
+            const texture = createTexture(style.type, style.c1, style.c2);
+
+            const geometry = new THREE.SphereGeometry(size, 64, 64);
+            const material = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            const planetMesh = new THREE.Mesh(geometry, material);
+            
+            planetMesh.position.x = distance; 
+            planetMesh.castShadow = true;
+            planetMesh.receiveShadow = true;
+            
+            orbitContainer.add(planetMesh);
+
+            // Trail
+            const trailGeo = new THREE.RingGeometry(distance - 0.2, distance + 0.2, 128);
+            const trailMat = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff, 
+                opacity: 0.08, 
+                transparent: true, 
+                side: THREE.DoubleSide 
+            });
+            const trailMesh = new THREE.Mesh(trailGeo, trailMat);
+            trailMesh.rotation.x = Math.PI / 2;
+            scene.add(trailMesh);
+
+            // Ring
+            if (hasRing) {
+                const ringGeo = new THREE.RingGeometry(size * 1.4, size * 2.2, 64);
+                const ringTex = createTexture('rings', '#dcb', 'transparent');
+                const ringMat = new THREE.MeshStandardMaterial({
+                    map: ringTex,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                ringMesh.rotation.x = Math.PI / 2;
+                ringMesh.rotation.y = -Math.PI / 8;
+                planetMesh.add(ringMesh);
+            }
+
+            // Earth specific
+            if (name === 'Earth') {
+                planetMesh.material.roughness = 0.4; 
+                const cloudGeo = new THREE.SphereGeometry(size * 1.02, 32, 32);
+                const cloudMat = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.4,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide
+                });
+                const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+                planetMesh.add(cloudMesh);
+                planetMesh.userData.clouds = cloudMesh;
+            }
+
+            // Calculate Speed
+            // Earth = 1.0 relative speed. 
+            // Target: Earth takes 1 minute per orbit.
+            // 60 FPS * 60 seconds = 3600 frames per orbit.
+            // Full circle = 2 * PI radians.
+            // Base Speed = (2 * PI) / 3600 = ~0.00174 radians/frame
+            const baseSpeed = 0.00174; 
+            
+            // Apply relative multiplier (Mercury is faster, Neptune slower)
+            const actualSpeed = baseSpeed * relativeSpeed;
+
+            planets.push({
+                orbitContainer: orbitContainer,
+                mesh: planetMesh,
+                orbitSpeed: actualSpeed,
+                rotationSpeed: 0.005 // Slow rotation for all for better visuals
+            });
+        }
+
+        // --- 5. INITIALIZE SOLAR SYSTEM ---
+        // Relative speeds: Speed = 1 / (Orbit Period in Earth Years)
+        // Mercury: 0.24 years -> ~4.1 speed
+        // Earth: 1.0 years -> 1.0 speed
+        // Neptune: 165 years -> ~0.006 speed
+        
+        createPlanet('Mercury', 2, 40, 4.1, false);
+        createPlanet('Venus', 3.5, 60, 1.6, false);
+        createPlanet('Earth', 3.8, 80, 1.0, false);
+        createPlanet('Mars', 2.5, 100, 0.53, false);
+        createPlanet('Jupiter', 10, 140, 0.08, false);
+        createPlanet('Saturn', 9, 180, 0.03, true);
+        createPlanet('Uranus', 6, 220, 0.01, false);
+        createPlanet('Neptune', 6, 250, 0.006, false);
+
+        // --- 6. RESIZE ---
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- 7. ANIMATION ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Rotate Sun Mesh
+            sunMesh.rotation.y += 0.001;
+
+            // Planets
+            planets.forEach(p => {
+                p.orbitContainer.rotation.y += p.orbitSpeed;
+                p.mesh.rotation.y += p.rotationSpeed;
+                if(p.mesh.userData.clouds) {
+                    p.mesh.userData.clouds.rotation.y += 0.002;
+                }
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+    </script>
+</body>
+</html>
+
+
