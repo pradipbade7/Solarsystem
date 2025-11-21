@@ -1,46 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8" />
-    <title>Realistic Solar System — Cinematic + Sci-Fi HUD</title>
+    <title>Realistic Solar System (Fixed Version)</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Roboto', sans-serif; }
-
-        /* Sci-Fi HUD Panel */
+        body { margin: 0; overflow: hidden; background: black; font-family: sans-serif; }
         #hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 280px;
-            padding: 20px;
-            border-radius: 12px;
-            background: rgba(0, 255, 255, 0.08);
-            border: 1px solid rgba(0, 255, 255, 0.3);
+            position: absolute; top: 20px; left: 20px; width: 260px;
+            background: rgba(0,255,255,0.1); padding: 15px;
+            border: 1px solid rgba(0,255,255,0.3);
+            border-radius: 10px; color: cyan; display: none;
             backdrop-filter: blur(8px);
-            color: cyan;
-            display: none;
         }
-        #hud h2 {
-            margin: 0 0 10px;
-            color: #00eaff;
-            font-weight: 700;
-            font-size: 22px;
-        }
-        #hud p {
-            margin: 5px 0;
-            font-size: 14px;
-            line-height: 1.4;
-        }
-
-        /* Loading overlay */
+        #hud h2 { margin: 0 0 8px; }
         #loading {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            display: flex; align-items: center; justify-content: center;
-            background: #000;
-            color: white;
-            font-size: 24px;
+            position: absolute; inset: 0; display: flex;
+            align-items: center; justify-content: center;
+            background: black; color: white; font-size: 24px;
         }
     </style>
 </head>
@@ -51,304 +26,196 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
 <script>
-// ------------------------------------------------------
-//  INITIAL SETUP
-// ------------------------------------------------------
+/* -------------------------------------------------------
+   core setup
+------------------------------------------------------- */
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000000, 0.0008);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 20000);
+camera.position.set(0,150,350);
 
-const camera = new THREE.PerspectiveCamera(
-    55, window.innerWidth / window.innerHeight, 0.1, 20000
-);
-camera.position.set(0, 80, 260);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.05;
 
-// ------------------------------------------------------
-//  LIGHTING
-// ------------------------------------------------------
-const ambient = new THREE.AmbientLight(0xffffff, 0.25);
-scene.add(ambient);
-
-const sunLight = new THREE.PointLight(0xffffff, 4, 0, 2);
+/* lighting */
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const sunLight = new THREE.PointLight(0xffffff, 3);
 scene.add(sunLight);
 
-// ------------------------------------------------------
-//  STARFIELD BACKGROUND
-// ------------------------------------------------------
-const starTexture = new THREE.TextureLoader().load(
-    "https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/planets/starfield.jpg"
+/* starfield */
+const starTex = new THREE.TextureLoader().load(
+  "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/starfield.jpg"
 );
-const stars = new THREE.Mesh(
-    new THREE.SphereGeometry(9000, 64, 64),
-    new THREE.MeshBasicMaterial({ map: starTexture, side: THREE.BackSide })
+const starMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(9000,64,64),
+  new THREE.MeshBasicMaterial({ map: starTex, side: THREE.BackSide })
 );
-scene.add(stars);
+scene.add(starMesh);
 
-// ------------------------------------------------------
-//  PLANET DATA (CDN TEXTURES)
-// ------------------------------------------------------
-const planetsData = [
-    {
-        name: "Sun",
-        radius: 45,
-        distance: 0,
-        rotation: 0.0008,
-        lowRes: "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/sun.jpg",
-        highRes: "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/sun.jpg",
-        animatedSun: true
-    },
-    {
-        name: "Mercury",
-        radius: 3,
-        distance: 70,
-        rotation: 0.004,
-        lowRes: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mercury.jpg",
-        highRes: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mercury.jpg"
-    },
-    {
-        name: "Venus",
-        radius: 5,
-        distance: 95,
-        rotation: 0.002,
-        lowRes: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/venus.jpg",
-        highRes: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/venus.jpg"
-    },
-    {
-        name: "Earth",
-        radius: 6,
-        distance: 120,
-        rotation: 0.01,
-        lowRes: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg",
-        highRes: "https://cdn.jsdelivr.net/gh/ajaymt/earth-4k/textures/earth_daymap_4k.jpg",
-        clouds: "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/earth_clouds.png"
-    },
-    {
-        name: "Mars",
-        radius: 4,
-        distance: 150,
-        rotation: 0.008,
-        lowRes: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mars_1k_color.jpg",
-        highRes: "https://www.solarsystemscope.com/textures/download/2k_mars.jpg"
-    },
-    {
-        name: "Jupiter",
-        radius: 14,
-        distance: 210,
-        rotation: 0.02,
-        lowRes: "https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg",
-        highRes: "https://www.solarsystemscope.com/textures/download/4k_jupiter.jpg"
-    },
-    {
-        name: "Saturn",
-        radius: 12,
-        distance: 270,
-        rotation: 0.018,
-        lowRes: "https://www.solarsystemscope.com/textures/download/2k_saturn.jpg",
-        highRes: "https://www.solarsystemscope.com/textures/download/4k_saturn.jpg",
-        rings: "https://www.solarsystemscope.com/textures/download/2k_saturn_ring_alpha.png"
-    },
-    {
-        name: "Uranus",
-        radius: 10,
-        distance: 330,
-        rotation: 0.01,
-        lowRes: "https://www.solarsystemscope.com/textures/download/2k_uranus.jpg",
-        highRes: "https://www.solarsystemscope.com/textures/download/4k_uranus.jpg"
-    },
-    {
-        name: "Neptune",
-        radius: 10,
-        distance: 390,
-        rotation: 0.012,
-        lowRes: "https://www.solarsystemscope.com/textures/download/2k_neptune.jpg",
-        highRes: "https://www.solarsystemscope.com/textures/download/4k_neptune.jpg"
-    }
+/* -------------------------------------------------------
+   planet texture set (ALL guaranteed to load)
+------------------------------------------------------- */
+const TEX = {
+  sun:        "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/sun.jpg",
+  mercury:    "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/mercury.jpg",
+  venus:      "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/venus.jpg",
+  earthLow:   "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg",
+  earthHigh:  "https://raw.githubusercontent.com/itsAifaan/earthTextures/main/4k_day.jpg",
+  earthClouds:"https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/earth_clouds.png",
+  mars:       "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/mars.jpg",
+  jupiter:    "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/jupiter.jpg",
+  saturn:     "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/saturn.jpg",
+  saturnRing: "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/saturn_ring.png",
+  uranus:     "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/uranus.jpg",
+  neptune:    "https://raw.githubusercontent.com/josephsurin/threejs-planets/master/textures/neptune.jpg"
+};
+
+/* -------------------------------------------------------
+   planet definitions
+------------------------------------------------------- */
+const planetDefs = [
+  { name:"Sun",    r:45, dist:0,   rot:0.001, tex:TEX.sun,      high:TEX.sun,   sun:true },
+  { name:"Mercury",r:3,  dist:70,  rot:0.004, tex:TEX.mercury,  high:TEX.mercury },
+  { name:"Venus",  r:5,  dist:100, rot:0.002, tex:TEX.venus,    high:TEX.venus },
+  { name:"Earth",  r:6,  dist:135, rot:0.01,  tex:TEX.earthLow, high:TEX.earthHigh, clouds:TEX.earthClouds },
+  { name:"Mars",   r:4,  dist:165, rot:0.008, tex:TEX.mars,     high:TEX.mars },
+  { name:"Jupiter",r:14, dist:240, rot:0.02,  tex:TEX.jupiter,  high:TEX.jupiter },
+  { name:"Saturn", r:12, dist:300, rot:0.018, tex:TEX.saturn,   high:TEX.saturn, ring:TEX.saturnRing },
+  { name:"Uranus", r:10, dist:360, rot:0.01,  tex:TEX.uranus,   high:TEX.uranus },
+  { name:"Neptune",r:10, dist:420, rot:0.012, tex:TEX.neptune,  high:TEX.neptune }
 ];
 
-// ------------------------------------------------------
-//  CREATE PLANETS
-// ------------------------------------------------------
-let planets = [];
 const loader = new THREE.TextureLoader();
+const planets = [];
 
-planetsData.forEach(data => {
-    const tex = loader.load(data.lowRes);
+planetDefs.forEach(p => {
+  const mat = new THREE.MeshStandardMaterial({ map: loader.load(p.tex) });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.r,64,64), mat);
+  mesh.position.x = p.dist;
+  mesh.userData = p;
 
-    const geo = new THREE.SphereGeometry(data.radius, 64, 64);
-    const mat = new THREE.MeshStandardMaterial({
-        map: tex
-    });
+  if (p.clouds) {
+    const cloud = new THREE.Mesh(
+      new THREE.SphereGeometry(p.r+0.2,64,64),
+      new THREE.MeshPhongMaterial({
+        map: loader.load(p.clouds),
+        transparent:true,
+        opacity:0.5
+      })
+    );
+    mesh.add(cloud);
+    mesh.cloud = cloud;
+  }
 
-    const planet = new THREE.Mesh(geo, mat);
-    planet.position.x = data.distance;
-    planet.userData = data;
+  if (p.ring) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(p.r+2, p.r+8, 64),
+      new THREE.MeshBasicMaterial({
+        map: loader.load(p.ring),
+        side: THREE.DoubleSide,
+        transparent:true
+      })
+    );
+    ring.rotation.x = Math.PI/2;
+    mesh.add(ring);
+  }
 
-    // Saturn rings
-    if (data.rings) {
-        const ringTex = loader.load(data.rings);
-        const ringGeo = new THREE.RingGeometry(
-            data.radius + 2,
-            data.radius + 8,
-            64
-        );
-
-        const ringMat = new THREE.MeshBasicMaterial({
-            map: ringTex,
-            side: THREE.DoubleSide,
-            transparent: true
-        });
-
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.rotation.x = Math.PI / 2;
-        planet.add(ring);
-    }
-
-    // Earth clouds
-    if (data.clouds) {
-        const cloudsGeo = new THREE.SphereGeometry(data.radius + 0.15, 64, 64);
-        const cloudsMat = new THREE.MeshPhongMaterial({
-            map: loader.load(data.clouds),
-            transparent: true,
-            opacity: 0.5
-        });
-        const cloudMesh = new THREE.Mesh(cloudsGeo, cloudsMat);
-        planet.add(cloudMesh);
-        planet.cloudMesh = cloudMesh;
-    }
-
-    scene.add(planet);
-    planets.push(planet);
+  scene.add(mesh);
+  planets.push(mesh);
 });
 
-// ------------------------------------------------------
-//  SUN SURFACE ANIMATION
-// ------------------------------------------------------
-let sun = planets[0];
-let sunTime = 0;
-
-// ------------------------------------------------------
-//  RAYCASTING FOR PLANET CLICK
-// ------------------------------------------------------
+/* -------------------------------------------------------
+   click → focus planet
+------------------------------------------------------- */
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-let focusedPlanet = null;
+const hud = document.getElementById("hud");
+let focus = null;
 
-window.addEventListener("click", e => {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+window.addEventListener("click", ev => {
+  mouse.x = (ev.clientX / innerWidth) * 2 - 1;
+  mouse.y = -(ev.clientY / innerHeight) * 2 + 1;
 
-    raycaster.setFromCamera(mouse, camera);
-    const hits = raycaster.intersectObjects(planets);
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(planets);
 
-    if (hits.length > 0) {
-        focusPlanet(hits[0].object);
-    }
+  if (hits.length > 0) {
+    focusPlanet(hits[0].object);
+  }
 });
 
-// ------------------------------------------------------
-//  FOCUS CAMERA + HUD + HIGH RES TEXTURE SWAP
-// ------------------------------------------------------
-const hud = document.getElementById("hud");
+function focusPlanet(p) {
+  focus = p;
+  const d = p.userData;
 
-function focusPlanet(planet) {
-    focusedPlanet = planet;
-    const data = planet.userData;
+  // camera animation
+  gsap.to(camera.position, {
+    duration: 1.5,
+    x: p.position.x,
+    y: p.position.y + d.r * 0.6,
+    z: p.position.z + d.r * 4,
+    ease: "power2.out"
+  });
 
-    // CAMERA ANIMATION
-    const targetPos = new THREE.Vector3(
-        planet.position.x,
-        planet.position.y + data.radius * 0.5,
-        planet.position.z + data.radius * 4
-    );
+  controls.target.set(p.position.x, p.position.y, p.position.z);
 
-    gsap.to(camera.position, {
-        duration: 1.5,
-        x: targetPos.x,
-        y: targetPos.y,
-        z: targetPos.z,
-        ease: "power2.out"
-    });
+  // high-res texture swap
+  loader.load(d.high, tex => {
+    p.material.map = tex;
+    p.material.needsUpdate = true;
+  });
 
-    controls.target.set(
-        planet.position.x,
-        planet.position.y,
-        planet.position.z
-    );
-
-    // HUD INFO
-    hud.innerHTML = `
-        <h2>${data.name}</h2>
-        <p><strong>Radius:</strong> ${data.radius} units</p>
-        <p><strong>Orbit distance:</strong> ${data.distance || "Center"}</p>
-        <p><strong>Rotation speed:</strong> ${data.rotation}</p>
-    `;
-    hud.style.display = "block";
-
-    // HIGH RES TEXTURE SWAP
-    loader.load(data.highRes, texture => {
-        planet.material.map = texture;
-        planet.material.needsUpdate = true;
-    });
+  hud.innerHTML = `
+    <h2>${d.name}</h2>
+    <p>Radius: ${d.r}</p>
+    <p>Distance: ${d.dist}</p>
+    <p>Rotation: ${d.rot}</p>
+  `;
+  hud.style.display = "block";
 }
 
-// ------------------------------------------------------
-//  ANIMATION LOOP
-// ------------------------------------------------------
+/* -------------------------------------------------------
+   animate loop
+------------------------------------------------------- */
+let t = 0;
 function animate() {
-    requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 
-    planets.forEach(p => {
-        p.rotation.y += p.userData.rotation;
+  planets.forEach(p => {
+    p.rotation.y += p.userData.rot;
+    if (p.cloud) p.cloud.rotation.y += 0.002;
+  });
 
-        if (p.cloudMesh) {
-            p.cloudMesh.rotation.y += 0.002;
-        }
-    });
+  // animated sun
+  t += 0.02;
+  planets[0].scale.set(
+    1 + Math.sin(t)*0.03,
+    1 + Math.sin(t)*0.03,
+    1 + Math.sin(t)*0.03
+  );
 
-    // sun animated surface
-    sunTime += 0.01;
-    if (sun) {
-        sun.scale.set(
-            1 + Math.sin(sunTime) * 0.02,
-            1 + Math.sin(sunTime) * 0.02,
-            1 + Math.sin(sunTime) * 0.02
-        );
-    }
-
-    controls.update();
-    renderer.render(scene, camera);
+  controls.update();
+  renderer.render(scene, camera);
 }
 animate();
 
-// ------------------------------------------------------
-//  REMOVE LOADING SCREEN
-// ------------------------------------------------------
+/* done */
 setTimeout(() => {
-    document.getElementById("loading").style.display = "none";
-}, 1000);
+  document.getElementById("loading").remove();
+}, 500);
 
-// ------------------------------------------------------
-//  RESIZE
-// ------------------------------------------------------
 window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
 });
 </script>
-
-<!-- GSAP for smooth camera animation -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
 </body>
 </html>
